@@ -1,8 +1,12 @@
 package bank.mangement.system;
+
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.util.*;
+import java.sql.*;
+import javax.mail.*;
+import javax.mail.internet.*;
 
 public class signupThree extends JFrame implements ActionListener {
 
@@ -173,7 +177,6 @@ public class signupThree extends JFrame implements ActionListener {
             Random random = new Random();
             long suffix = random.nextInt(90000000) + 10000000L;
             long cardnumber = 5040936000000000L + suffix;
-
             int pinnumber = random.nextInt(9000) + 1000;
 
             StringBuilder facility = new StringBuilder();
@@ -186,22 +189,77 @@ public class signupThree extends JFrame implements ActionListener {
 
             try {
                 conn conn = new conn();
-                String q1 = "insert into signupthree values('" + formno + "','" + accountType + "','" + cardnumber + "','" + pinnumber + "','" + facility.toString() + "')";
-                String q2 = "insert into login1 values('" + formno + "','" + cardnumber + "','" + pinnumber + "')";
+                String q1 = "INSERT INTO signupthree VALUES('" + formno + "','" + accountType + "','" + cardnumber + "','" + pinnumber + "','" + facility.toString() + "')";
+                String q2 = "INSERT INTO login1 VALUES('" + formno + "','" + cardnumber + "','" + conn.hashPin(String.valueOf(pinnumber)) + "')";
+
                 conn.s.executeUpdate(q1);
                 conn.s.executeUpdate(q2);
 
-                JOptionPane.showMessageDialog(null, "Card Number: " + cardnumber + "\nPIN: " + pinnumber);
-                setVisible(false);
-                new Deposit(String.valueOf(pinnumber)).setVisible(true);
-            }catch (Exception e) {
-    JOptionPane.showMessageDialog(null, "Error: " + e.getMessage(), "Exception", JOptionPane.ERROR_MESSAGE);
-}
+                // Send email notification if selected
+                if (c4.isSelected()) {
+                    sendAccountCreationEmail(cardnumber, pinnumber);
+                }
 
+                JOptionPane.showMessageDialog(null, "Account Created Successfully!\nCard Number: " + cardnumber + "\nPIN: " + pinnumber);
+                setVisible(false);
+                new Login().setVisible(true);
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(null, "Error: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            }
         } else if (ae.getSource() == cancel) {
             setVisible(false);
             new Login().setVisible(true);
         }
+    }
+
+    private void sendAccountCreationEmail(long cardNumber, int pin) {
+        new Thread(() -> {
+            try {
+                // Get user email from database
+                conn c = new conn();
+                ResultSet rs = c.s.executeQuery("SELECT email FROM signup WHERE formno = '" + formno + "'");
+                if (rs.next()) {
+                    String to = rs.getString("email");
+
+                    // Email configuration (replace with your SMTP details)
+                    String host = "smtp.gmail.com";
+                    String username = "yourbankemail@gmail.com";
+                    String password = "yourpassword";
+
+                    Properties props = new Properties();
+                    props.put("mail.smtp.auth", "true");
+                    props.put("mail.smtp.starttls.enable", "true");
+                    props.put("mail.smtp.host", host);
+                    props.put("mail.smtp.port", "587");
+
+                    Session session = Session.getInstance(props, new Authenticator() {
+                        protected PasswordAuthentication getPasswordAuthentication() {
+                            return new PasswordAuthentication(username, password);
+                        }
+                    });
+
+                    Message message = new MimeMessage(session);
+                    message.setFrom(new InternetAddress(username));
+                    message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
+                    message.setSubject("Your New Bank Account Details");
+
+                    String msg = "Dear Customer,\n\n" +
+                                "Your new account has been successfully created with the following details:\n\n" +
+                                "Account Number: " + formno + "\n" +
+                                "Card Number: " + cardNumber + "\n" +
+                                "PIN: " + pin + "\n\n" +
+                                "Please keep this information secure. Do not share your PIN with anyone.\n\n" +
+                                "Thank you for choosing our bank!\n\n" +
+                                "Regards,\nBank Team";
+
+                    message.setText(msg);
+
+                    Transport.send(message);
+                }
+            } catch (Exception e) {
+                System.out.println("Email sending failed: " + e.getMessage());
+            }
+        }).start();
     }
 
     public static void main(String[] args) {
